@@ -83,6 +83,13 @@ class Knowledge:
         if pred in self.db:
             yield from self.db[pred].values()
 
+    def parts(self, partitioning):
+        result = set()
+        for db in self.db.values():
+            for clause in db.values():
+                result.update(lbl[1] for lbl in clause.sentence.labels() if lbl[0]==partitioning)
+        return result
+
 
 class Subgoal:
     def __init__(self, literal):
@@ -92,6 +99,8 @@ class Subgoal:
         self.negs = list()
         self.comp = False
 
+    def __repr__(self):
+        return "Subgoal(literal={}, anss={}, poss={}, negs={}, comp={})".format(self.literal, self.anss, self.poss, self.negs, self.comp)
 
 class Waiter:
     def __init__(self, literal, clause, selected):
@@ -99,6 +108,8 @@ class Waiter:
         self.clause = clause
         self.selected = selected
 
+    def __repr__(self):
+        return "Waiter(literal={}, clause={}, selected={})".format(self.literal, self.clause, self.selected)
 
 class Frame:
     def __init__(self, subgoal, dfn, poslink, neglink):
@@ -112,6 +123,9 @@ class Mins:
     def __init__(self, posmin, negmin):
         self.posmin = posmin
         self.negmin = negmin
+
+    def __str__(self):
+        return "(posmin={}, negmin={})".format(self.posmin, self.negmin)
 
 
 class Prover:
@@ -157,11 +171,12 @@ class Prover:
         self.slg_subgoal(query, Mins(dfn, float('inf')))
         if self.debugger: self.debugger.done(subgoal)
 
-        seen = set()
+        seen = dict()
         for answer in subgoal.anss:
-            if answer.head not in seen:
-                seen.add(answer.head)
-                yield answer.head
+            seen.setdefault(answer.head, [])
+            seen[answer.head].append(answer.sentence)
+        for head, sentences in seen.items():
+            yield Clause(head, [], [], worlds.disjunct(*sentences))
 
     def slg_resolve(self, clause, selected, other):
         """
@@ -181,7 +196,12 @@ class Prover:
                 body.extend(renamed.body)
             else:
                 body.append(lit)
-        return Clause(clause.head, body, clause.delayed).subst(env)
+
+        sentence = worlds.conjunct(clause.sentence, other.sentence)
+        if worlds.falsehood(sentence, self.kb):
+            return None
+
+        return Clause(clause.head, body, clause.delayed, sentence).subst(env)
 
     def slg_factor(self, clause, selected, other):
         """
@@ -197,7 +217,7 @@ class Prover:
 
         body = [lit for lit in clause.body if lit != selected]
         delayed = clause.delayed + [selected]
-        return Clause(clause.head, body, delayed).subst(env)
+        return Clause(clause.head, body, delayed, worlds.conjunct(clause.sentence, other.sentence)).subst(env)
 
     def slg_subgoal(self, literal, mins):
         """
@@ -254,7 +274,12 @@ class Prover:
         # so call subsumption is not possible.
         #
         # However, subsumption through equality is still possible.
-        return clause in answers
+        if self.debugger: self.debugger.note("answer_subsumed_by({}, {}) -> {}".format(clause, answers, clause in answers))
+        for cl in answers:
+            # XXX: cl.body and cl.delayed empty? This might be an issue.
+            if cl.head == clause.head and worlds.equivalent(cl.sentence, clause.sentence, self.kb):
+                return True
+        return False
 
     def other_answer_with_same_head(self, clause, answers):
         for a in answers:
@@ -307,11 +332,23 @@ class Prover:
                 subgoal.poss.append(Waiter(literal, clause, selected))
                 self.update_lookup(literal, selected, True, mins)
             todo = []
+            def fact_in_collection(fact, collection):
+                for cl in collection:
+                    if cl.head == fact and not cl.body and not cl.delayed:
+                        return True
+                return False
             for c in subgoal.anss:
-                if Clause(c.head,[],[]) in subgoal.anss:
-                    todo.append(self.slg_resolve(clause, selected, Clause(c.head,[],[])))
+                if fact_in_collection(c.head, subgoal.anss):
+                    # try to unify with already present answers, this should only
+                    # fail if it leads to a contradictory world
+                    resolvent = self.slg_resolve(clause, selected, Clause(c.head,[],[],c.sentence))
+                    if resolvent is not None:
+                        todo.append(resolvent)
                 else:
-                    todo.append(self.slg_factor(clause, selected, c))
+                    resolvent = self.slg_factor(clause, selected, c)
+                    assert resolvent is not None
+                    todo.append(resolvent)
+                    #todo.append(self.slg_factor(clause, selected, c))
             for c in todo:
                 self.slg_newclause(literal, c, mins)
 

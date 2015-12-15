@@ -33,22 +33,24 @@ def primitives():
     c1 = clause(l1, [l2])
     kb.assert_clause(c1)
 
+    heads = lambda s: set(map(lambda x: x.head, s))
+
     query = lit(pred('y',1),[var('X')])
     answer = prover.ask(query)
-    assert set(answer) == set([lit(pred('y',1), [const('foo')]), lit(pred('y',1), [const('bar')]), lit(pred('y',1), [const('baz')])])
+    assert heads(answer) == set([lit(pred('y',1), [const('foo')]), lit(pred('y',1), [const('bar')]), lit(pred('y',1), [const('baz')])])
 
     query = lit(pred('y',2), [const('twelve'), var('X')])
     answer = prover.ask(query)
-    assert not set(answer)
+    assert not heads(answer)
 
     kb.assert_clause(clause(lit(pred('testpred', 1), [const('quux')]), []))
     query = lit(pred('y',1),[var('X')])
     answer = prover.ask(query)
-    assert set(answer) == set([lit(pred('y',1), [const('foo')]), lit(pred('y',1), [const('bar')]), lit(pred('y',1), [const('baz')]), lit(pred('y',1), [const('quux')])])
+    assert heads(answer) == set([lit(pred('y',1), [const('foo')]), lit(pred('y',1), [const('bar')]), lit(pred('y',1), [const('baz')]), lit(pred('y',1), [const('quux')])])
 
     query = lit(pred('y',2), [const('twelve'), var('X')])
     answer = prover.ask(query)
-    assert not set(answer)
+    assert not heads(answer)
 
 @test.prover
 def equals():
@@ -62,9 +64,11 @@ def equals():
     c1 = clause(l1, [l2, l3])
     kb.assert_clause(c1)
 
+    heads = lambda s: set(map(lambda x: x.head, s))
+
     for v in ('foo', 'bar'):
         kb.assert_clause(clause(lit(pred('z',1), [const(v)]), []))
 
     query = lit(pred('y',1),[var('X')])
     answer = prover.ask(query)
-    assert set(answer) == set([lit(pred('y',1), [const('foo')]), lit(pred('y',1), [const('bar')])])
+    assert heads(answer) == set([lit(pred('y',1), [const('foo')]), lit(pred('y',1), [const('bar')])])

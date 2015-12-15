@@ -1,9 +1,9 @@
 JudgeD: Probabilistic Datalog
 =============================
 
-_You are on the master branch: this branch is the deterministic basis of
-JudgeD. Switch to either the `exact` or `montecarlo` branches for probabilistic
-variants._
+_You are on the exact branch: this branch is the exact sentence calculation
+variant of JudgeD. You can switch to either the `montecarlo` or `master`
+branches for a probabilistic or deterministic variant, respectively._
 
 JudgeD is a proof-of-concept implementation of a probabilistic variant of
 [Datalog](https://en.wikipedia.org/wiki/Datalog). JudgeD is available under the

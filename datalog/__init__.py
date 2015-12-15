@@ -232,6 +232,9 @@ class Literal:
     def __str__(self):
         return format(self, 'plain')
 
+    def __repr__(self):
+        return format(self, 'plain')
+
     def __format__(self, format_spec):
         return formatting.literal(self, format_spec)
 
@@ -362,6 +365,9 @@ class Clause:
     def __str__(self):
         return format(self, 'plain')
 
+    def __repr__(self):
+        return format(self, 'plain')
+
     def __format__(self, format_spec):
         return formatting.clause(self, format_spec)
 
@@ -395,6 +401,7 @@ class Clause:
             result += '|'
             for lit in self.delayed:
                 result += add_size(lit.id)
+            result += '%' + add_size(repr(self.sentence))
             self._id = result
         return result
 

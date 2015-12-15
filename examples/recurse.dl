@@ -1,0 +1,12 @@
+% Test of recursive definitions
+
+e(a,b) [x=2].
+e(a,c) [x=1].
+e(c,b) [x=1].
+e(b,c).
+e(b,a).
+
+tc(X,Y) :- e(X,Y).
+tc(X,Y) :- e(X,Z), tc(Z,Y).
+
+tc(a,V)?

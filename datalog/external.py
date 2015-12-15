@@ -78,10 +78,6 @@ def _caching_decorator(transform_literal):
     return cache_wrapper
 
 
-def apply_caching(strategy, source):
-    return strategy(source)
-
-
 def custom_strategy(literal_transformer):
     return _caching_decorator(literal_transformer)
 

@@ -1,0 +1,8 @@
+% Test case of falsehood world
+
+a(10) [x=a].
+b(10) [x=b].
+
+C(A, B) :- a(A), b(B).
+
+C(A, B)?

@@ -1,0 +1,13 @@
+% Simple case of conjuctive worlds
+%
+% expected:
+% b(13) [x=a1 or x=a2]
+% b(37) [x=b]
+
+a(13) [x=a1].
+a(13) [x=a2].
+a(37) [x=b].
+
+b(X) :- a(X).
+
+b(X)?

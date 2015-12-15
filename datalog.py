@@ -19,7 +19,7 @@ import traceback
 
 # Public constants
 NAME  = 'Datalog'
-FLUFF = '^_^'
+FLUFF = 'O_o'
 __version__ = '0.1a1'
 
 
@@ -96,6 +96,19 @@ def batch(readers, args):
             print("{}{}: {}".format(reader.name, e.context, e.message))
             break
 
+def interactive_command(line, args):
+    command = line.strip()[1:]
+    if command == "kb":
+        print(formatting.comment('% Outputting internal KB:'))
+        for pred in kb.db:
+            print(formatting.comment('%') + " {} =>".format(pred))
+            for id, clause in kb.db[pred].items():
+                print(formatting.comment('%')+"   {}".format(clause))
+    elif command == 'help':
+        print(formatting.comment('% available commands: help, kb'))
+    else:
+        raise datalog.DatalogError("Unknown command '{}'".format(command))
+
 
 def interactive(args):
     """
@@ -115,7 +128,10 @@ def interactive(args):
         while True:
             line = input('> ')
             try:
-                handle_reader(io.StringIO(line), args)
+                if line.strip().startswith('.'):
+                    interactive_command(line, args)
+                else:
+                    handle_reader(io.StringIO(line), args)
             except datalog.DatalogError as e:
                 print("Error: {}".format(e.message))
     except EOFError:
@@ -135,7 +151,7 @@ class ReportingDebugger:
         print("Query '{}'".format(literal))
 
     def done(self, subgoal):
-        print("Query completed: {} answers".format(len(subgoal.anss)))
+        print("Query completed: {} pseudo-answers".format(len(subgoal.anss)))
         print("-" * 80)
 
     def answer(self, literal, clause, selected):
@@ -151,6 +167,9 @@ class ReportingDebugger:
     def complete(self, subgoal):
         self.depth -= 1
         print("{}Completed '{}'".format(self.indent(), subgoal.literal))
+
+    def note(self, message):
+        print(formatting.comment("{}(note:".format(self.indent())), message,formatting.comment(')'))
 
 
 def key_value_pair(string):
@@ -182,7 +201,7 @@ def main():
     format_default = os.environ.get(FORMAT_ENV_KEY, 'color')
     if not sys.stdout.isatty():
         format_default = 'plain'
-    options.add_argument('-f', '--format', choices=('plain','color','html'), default=format_default,
+    options.add_argument('-f', '--format', choices=('plain','color', 'html'), default=format_default,
                          help='Selects output format. Defaults to the value of the '+FORMAT_ENV_KEY+' environment variable if set, \'plain\' if it is not set or if the output is piped.')
 
     args = options.parse_args()
