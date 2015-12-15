@@ -13,13 +13,15 @@ from datalog import caching
 import sys
 import os
 import argparse
+import collections
 import importlib
 import traceback
+import json
 
 
 # Public constants
 NAME  = 'Datalog'
-FLUFF = '^_^'
+FLUFF = '~_~'
 __version__ = '0.1a1'
 
 
@@ -46,8 +48,85 @@ def query(clause, args):
 
     # set up prover and execute query
     prover = logic.Prover(kb, debugger=debugger, cache=cache)
-    for a in prover.ask(clause):
-        print("{}.".format(a))
+
+    count = 0
+    worlds = collections.Counter()
+    answers = collections.Counter()
+
+    def p(c):
+        return c / count
+
+    def exact(w):
+        result = 1
+        for p,v in w:
+            result *= kb.prob[p][v]
+        return result
+
+    def error():
+        result = 0
+        for w in worlds:
+            result += (exact(w) - p(worlds[w]))**2
+        result /= len(worlds)
+        return result**0.5
+
+    while args.number == 0 or count < args.number:
+        count += 1
+
+        answer = list(prover.ask(clause, flush_cache=False))
+        world = frozenset(prover.choices.items())
+
+        for a in answer:
+            answers[a] += 1
+        worlds[world] += 1
+
+        if args.approximate is not None:
+            if error() <= args.approximate:
+                break
+
+    if args.json:
+        result = dict()
+        result['iterations'] = count
+        result['root-mean-square-error'] = error()
+        result['answers'] = list()
+        for a, c in sorted(answers.items(), key=lambda t: p(t[1])):
+            result['answers'].append({
+                'predicate': str(a.pred.name),
+                'terms': [str(t) for t in a.terms],
+                'probability': p(c)
+            })
+        json.dump(result, sys.stdout)
+        print()
+    else:
+        print(formatting.comment("% iterations: {}".format(count)))
+        print(formatting.comment("% root-mean-square error: {}".format(error())))
+        for a, c in sorted(answers.items(), key=lambda t: p(t[1])):
+            print("{}.".format(a) + formatting.comment("  % p = {}".format(p(c))))
+
+
+def annotate(annotation, args):
+    """
+    Handles annotations in the datalog source.
+    """
+    if annotation[0] == 'probability':
+        if args.verbose: print(formatting.comment("% annotate ") + "p({}) = {}".format(annotation[1], annotation[2]))
+        kb.add_probability(annotation[1].partitioning, annotation[1].part, annotation[2])
+    elif annotation[0] == 'distribution':
+        if args.verbose: 
+            print("% annotate {} distribution for p({})".format(annotation[2], annotation[1]))
+
+        # determine 
+        parts = set()
+
+        for pred in kb.db:
+            for clause in kb.db[pred].values():
+                parts.update(lbl.part for lbl in clause.sentence.labels() if lbl.partitioning == annotation[1])
+
+        if parts:
+            for part in parts:
+                kb.add_probability(annotation[1], part, 1/len(parts))
+                print("%% Setting p({}={}) = {}".format(annotation[1], part, 1/len(parts)))
+    else:
+        raise datalog.DatalogError("Unknown annotation {}".format(annotation))
 
 
 def assert_clause(clause, args):
@@ -65,6 +144,7 @@ def retract_clause(clause, args):
 actions = {
     'assert': assert_clause,
     'retract': retract_clause,
+    'annotate': annotate,
     'query': query
 }
 
@@ -171,6 +251,10 @@ def main():
                          help='Imports the datalog files before going to interactive mode.')
     options.add_argument('-v', '--verbose', default=False, action='store_true',
                          help='Increases verbosity. Outputs each imported statement before doing it.')
+    options.add_argument('-n', '--number', type=int, default=1000,
+                         help='The maximum number of simulation runs to do. A value of zero means no maximum. Defaults to %(default)s.')
+    options.add_argument('-a', '--approximate', type=float, default=0,
+                         help='The maximum allowable error for an approximation simulation. Defaults to %(default)s.')
     options.add_argument('-d', '--debug', default=False, action='store_true',
                          help='Enables debugging output.')
     options.add_argument('-c', '--cache', choices=('dict', 'none'), default='dict',
@@ -184,6 +268,8 @@ def main():
         format_default = 'plain'
     options.add_argument('-f', '--format', choices=('plain','color','html'), default=format_default,
                          help='Selects output format. Defaults to the value of the '+FORMAT_ENV_KEY+' environment variable if set, \'plain\' if it is not set or if the output is piped.')
+    options.add_argument('-j', '--json', default=False, action='store_true',
+                         help='Output query answers in JSON format.')
 
     args = options.parse_args()
 

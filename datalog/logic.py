@@ -3,6 +3,9 @@ Core datalog module that provides classes for terms, predicates, literals, and
 clauses as well as a Knowledge base implementation and a Prover.
 """
 
+import random
+import collections
+
 from datalog import *
 from datalog import worlds
 import datalog.primitives
@@ -19,6 +22,7 @@ class Knowledge:
     def __init__(self):
         self.db = dict()
         self.prim = dict()
+        self.prob = dict()
 
         datalog.primitives.register_primitives(self)
 
@@ -64,6 +68,27 @@ class Knowledge:
     def add_primitive(self, predicate, gen):
         """Creates a primitive predicate by coupling it to a generator."""
         self.prim[predicate] = gen
+
+    def add_probability(self, partitioning, part, prob):
+        """Stores the probability attached to a partition."""
+        self.prob.setdefault(partitioning, dict())
+        self.prob[partitioning][part] = prob
+
+    def pick(self, partitioning):
+        """
+        Randomly picks a partition based on the known partitions. The selection
+        is weighted by the assigned probabilities.
+        """
+        r = random.random()
+        a = 0.0
+        try:
+            for part, prob in self.prob[partitioning].items():
+                a += prob
+                if a >= r:
+                    return part
+            raise DatalogError("Probabilities for partitioning '{}' do not sum to 1.0.".format(partitioning))
+        except:
+            raise DatalogError("Probabilities for partitioning '{}' not set".format(partitioning))
 
     def clauses(self, literal, prover):
         """
@@ -114,6 +139,20 @@ class Mins:
         self.negmin = negmin
 
 
+class Choices(dict):
+    """
+    Choice picking device.
+    """
+    def __init__(self, knowledge):
+        self.kb = knowledge
+        super()
+
+    def check(self, key, part):
+        if key not in self:
+            self[key] = self.kb.pick(key)
+        return self[key] == part
+
+
 class Prover:
     """
     The prover can prove queries over a knowledge base. Use the ask method with
@@ -133,6 +172,7 @@ class Prover:
         # initialize bookkeeping
         self.subgoals = dict()
         self.stack = list()
+        self.choices = Choices(self.kb)
         self.count = 1
 
     def ask(self, query, flush_cache=True):
@@ -141,6 +181,7 @@ class Prover:
         returned as a list of proven facts. [Chen et al., Figure 13, p. 181]
         """
         self.count = 1
+        self.choices.clear()
         self.subgoals.clear()
         self.stack.clear()
         if flush_cache:
@@ -162,6 +203,15 @@ class Prover:
             if answer.head not in seen:
                 seen.add(answer.head)
                 yield answer.head
+
+
+    def allows(self, sentence):
+        """
+        Checks if the sentence is allowed in the set of worlds currently
+        chosen. This method updates self.choices if a choice is needed.
+        """
+        return worlds.evaluate(sentence, self.choices)
+
 
     def slg_resolve(self, clause, selected, other):
         """
@@ -205,6 +255,8 @@ class Prover:
         """
         if self.debugger: self.debugger.subgoal(literal)
         for clause in self.kb.clauses(literal, self):
+            if not self.allows(clause.sentence):
+                continue
             resolvent = self.slg_resolve(Clause(literal, [literal]), literal, clause)
             if resolvent is not None:
                 self.slg_newclause(literal, resolvent, mins)
